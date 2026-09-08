@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Análisis Estadístico - Red BancoSeguro</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <span class="navbar-brand">🏦 Red BancoSeguro</span>
+        <div class="navbar-info">
+            <div>
+                <span>👤 {{ usuario }}</span>
+                <span class="badge">{{ rol }}</span>
+            </div>
+            <div class="navbar-links">
+                <a href="{{ url_for('index') }}">📊 Análisis</a>
+                {% if rol == 'Administrador del Sistema' %}
+                    <a href="{{ url_for('usuarios') }}">👥 Usuarios</a>
+                {% endif %}
+                <a href="{{ url_for('logout') }}">🚪 Cerrar Sesión</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">
+                        <span class="alert-icon">
+                            {% if category == 'error' %}✕{% elif category == 'success' %}✓{% else %}ℹ{% endif %}
+                        </span>
+                        <span>{{ message }}</span>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- SECCIÓN 1: REGISTRO MANUAL -->
+        {% if rol in ['Cajero Registrador', 'Auditor de Calidad', 'Analista de Riesgo'] %}
+        <div class="section">
+            <div class="section-title">➕ Registrar Nueva Transacción</div>
+            
+            <form method="POST" action="{{ url_for('registrar_manual') }}" class="form-container">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                    <div class="form-group">
+                        <label for="id_tipo">Tipo de Transacción *</label>
+                        <select id="id_tipo" name="id_tipo" required>
+                            <option value="">-- Selecciona tipo --</option>
+                            {% for tipo in tipos %}
+                                <option value="{{ tipo['id_tipo'] }}">{{ tipo['nombre_tipo'] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="id_ciudad">Ciudad del Cajero *</label>
+                        <select id="id_ciudad" name="id_ciudad" required>
+                            <option value="">-- Selecciona ciudad --</option>
+                            {% for ciudad in ciudades %}
+                                <option value="{{ ciudad['id_ciudad'] }}">{{ ciudad['nombre_ciudad'] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="monto_transaccion_miles">Monto (miles) *</label>
+                        <input type="number" id="monto_transaccion_miles" name="monto_transaccion_miles" step="0.1" placeholder="500">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="tiempo_transaccion_seg">Tiempo (segundos)</label>
+                        <input type="number" id="tiempo_transaccion_seg" name="tiempo_transaccion_seg" step="0.1" placeholder="45">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="saldo_disponible_miles">Saldo Disponible (miles) *</label>
+                        <input type="number" id="saldo_disponible_miles" name="saldo_disponible_miles" step="0.1" required placeholder="1500">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="fecha_transaccion">Fecha *</label>
+                        <input type="date" id="fecha_transaccion" name="fecha_transaccion" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="hora_transaccion">Hora *</label>
+                        <input type="time" id="hora_transaccion" name="hora_transaccion" required>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-success btn-block">💾 Registrar Transacción</button>
+            </form>
+        </div>
+        {% endif %}
+
+        <!-- SECCIÓN 2: CARGA CSV -->
+        {% if rol == 'Administrador del Sistema' %}
+        <div class="section">
+            <div class="section-title">📤 Cargar Archivo CSV</div>
+            
+            <form method="POST" action="{{ url_for('cargar_csv') }}" enctype="multipart/form-data" class="form-container">
+                <div class="form-group">
+                    <label for="archivo_csv">Selecciona archivo CSV</label>
+                    <input type="file" id="archivo_csv" name="archivo_csv" accept=".csv" required>
+                    <small style="color: #718096; margin-top: 0.5rem; display: block;">
+                        Formato esperado: id_transaccion, tipo_transaccion, ciudad_cajero, monto_transaccion_miles, tiempo_transaccion_seg, saldo_disponible_miles, fecha_transaccion, hora_transaccion
+                    </small>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">📤 Cargar CSV</button>
+            </form>
+        </div>
+        {% endif %}
+
+        <!-- SECCIÓN 3: DATOS CRUDOS -->
+        <div class="section">
+            <div class="section-title">🔍 Datos Crudos (Antes de Limpieza)</div>
+            
+            {% if total_crudo > 0 %}
+            <div style="margin-bottom: 1rem;">
+                <span class="stat-card" style="display: inline-block; padding: 0.8rem 1rem;">
+                    Total de Registros: <strong>{{ total_crudo }}</strong>
+                </span>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Tipo</th>
+                            <th>Ciudad</th>
+                            <th>Monto</th>
+                            <th>Tiempo (seg)</th>
+                            <th>Saldo</th>
+                            <th>Fecha</th>
+                            <th>Hora</th>
+                            <th>Usuario</th>
+                            <th>Rol</th>
+                            {% if rol in ['Auditor de Calidad', 'Administrador del Sistema'] %}
+                            <th>Acciones</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in df_crudo.values.tolist() if df_crudo is defined %}
+                        <tr>
+                            <td><strong>#{{ row[0] }}</strong></td>
+                            <td>{{ row[5] or 'N/A' }}</td>
+                            <td>{{ row[6] or 'N/A' }}</td>
+                            <td>{{ row[1]|round(1) if row[1] else 'N/A' }}</td>
+                            <td>{{ row[2]|round(1) if row[2] else 'N/A' }}</td>
+                            <td>{{ row[3]|round(1) if row[3] else 'N/A' }}</td>
+                            <td>{{ row[7] or 'N/A' }}</td>
+                            <td>{{ row[8] or 'N/A' }}</td>
+                            <td>{{ row[9] or 'N/A' }}</td>
+                            <td><span style="background: #667eea; color: white; padding: 0.3rem 0.6rem; border-radius: 3px; font-size: 0.85rem;">{{ row[10] or 'N/A' }}</span></td>
+                            {% if rol in ['Auditor de Calidad', 'Administrador del Sistema'] %}
+                            <td style="white-space: nowrap;">
+                                <a href="/editar/{{ row[0] }}" class="btn btn-warning btn-small" style="margin-right: 0.5rem;">✏️</a>
+                                <form method="POST" action="/eliminar/{{ row[0] }}" style="display: inline;">
+                                    <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('¿Eliminar registro?');">🗑️</button>
+                                </form>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-warning">
+                <span class="alert-icon">⚠</span>
+                <span>No hay registros de transacciones cargados aún</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- SECCIÓN 4: DATOS LIMPIOS -->
+        <div class="section">
+            <div class="section-title">✨ Datos Limpios (Después de Limpieza)</div>
+            
+            {% if total_limpio > 0 %}
+            <div style="margin-bottom: 1rem;">
+                <span class="stat-card" style="display: inline-block; padding: 0.8rem 1rem; border-left-color: #48bb78;">
+                    Total de Registros: <strong>{{ total_limpio }}</strong> 
+                    <span style="color: #48bb78;">({{ total_crudo - total_limpio }} eliminados)</span>
+                </span>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Tipo</th>
+                            <th>Ciudad</th>
+                            <th>Monto</th>
+                            <th>Tiempo (seg)</th>
+                            <th>Saldo</th>
+                            <th>Fecha</th>
+                            <th>Hora</th>
+                            <th>Usuario</th>
+                            <th>Rol</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in df_limpio.values.tolist() if df_limpio is defined %}
+                        <tr>
+                            <td><strong>#{{ row[0] }}</strong></td>
+                            <td>{{ row[5] or 'N/A' }}</td>
+                            <td>{{ row[6] or 'N/A' }}</td>
+                            <td>{{ row[1]|round(1) if row[1] else 'N/A' }}</td>
+                            <td>{{ row[2]|round(1) if row[2] else 'N/A' }}</td>
+                            <td>{{ row[3]|round(1) if row[3] else 'N/A' }}</td>
+                            <td>{{ row[7] or 'N/A' }}</td>
+                            <td>{{ row[8] or 'N/A' }}</td>
+                            <td>{{ row[9] or 'N/A' }}</td>
+                            <td><span style="background: #48bb78; color: white; padding: 0.3rem 0.6rem; border-radius: 3px; font-size: 0.85rem;">{{ row[10] or 'N/A' }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <span class="alert-icon">ℹ</span>
+                <span>No hay datos limpios disponibles</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- SECCIÓN 5: ESTADÍSTICA DESCRIPTIVA -->
+        {% if stats_crudo or stats_limpio %}
+        <div class="section">
+            <div class="section-title">📈 Estadística Descriptiva Comparativa</div>
+
+            <div class="section-subtitle">Monto de Transacción (miles)</div>
+            
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Medida</th>
+                            <th>Datos Crudos</th>
+                            <th>Datos Limpios</th>
+                            <th>Diferencia</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if stats_crudo.get('monto_transaccion_miles') and stats_limpio.get('monto_transaccion_miles') %}
+                            <tr>
+                                <td><strong>Media</strong></td>
+                                <td>{{ stats_crudo['monto_transaccion_miles']['media']|round(2) }}</td>
+                                <td>{{ stats_limpio['monto_transaccion_miles']['media']|round(2) }}</td>
+                                <td>{{ (stats_limpio['monto_transaccion_miles']['media'] - stats_crudo['monto_transaccion_miles']['media'])|round(2) }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Mediana</strong></td>
+                                <td>{{ stats_crudo['monto_transaccion_miles']['mediana']|round(2) }}</td>
+                                <td>{{ stats_limpio['monto_transaccion_miles']['mediana']|round(2) }}</td>
+                                <td>{{ (stats_limpio['monto_transaccion_miles']['mediana'] - stats_crudo['monto_transaccion_miles']['mediana'])|round(2) }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Desv. Estándar</strong></td>
+                                <td>{{ stats_crudo['monto_transaccion_miles']['desviacion_estandar']|round(2) }}</td>
+                                <td>{{ stats_limpio['monto_transaccion_miles']['desviacion_estandar']|round(2) }}</td>
+                                <td>{{ (stats_limpio['monto_transaccion_miles']['desviacion_estandar'] - stats_crudo['monto_transaccion_miles']['desviacion_estandar'])|round(2) }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Coef. Variación (%)</strong></td>
+                                <td>{{ stats_crudo['monto_transaccion_miles']['coeficiente_variacion']|round(2) }}%</td>
+                                <td>{{ stats_limpio['monto_transaccion_miles']['coeficiente_variacion']|round(2) }}%</td>
+                                <td>{{ (stats_limpio['monto_transaccion_miles']['coeficiente_variacion'] - stats_crudo['monto_transaccion_miles']['coeficiente_variacion'])|round(2) }}%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Asimetría</strong></td>
+                                <td>{{ stats_crudo['monto_transaccion_miles']['asimetria']|round(4) }}</td>
+                                <td>{{ stats_limpio['monto_transaccion_miles']['asimetria']|round(4) }}</td>
+                                <td>{{ (stats_limpio['monto_transaccion_miles']['asimetria'] - stats_crudo['monto_transaccion_miles']['asimetria'])|round(4) }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Curtosis</strong></td>
+                                <td>{{ stats_crudo['monto_transaccion_miles']['curtosis']|round(4) }}</td>
+                                <td>{{ stats_limpio['monto_transaccion_miles']['curtosis']|round(4) }}</td>
+                                <td>{{ (stats_limpio['monto_transaccion_miles']['curtosis'] - stats_crudo['monto_transaccion_miles']['curtosis'])|round(4) }}</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center">No hay datos para calcular estadísticas</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="section-subtitle" style="margin-top: 2rem;">Tiempo de Transacción (segundos)</div>
+            
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Medida</th>
+                            <th>Datos Crudos</th>
+                            <th>Datos Limpios</th>
+                            <th>Diferencia</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if stats_crudo.get('tiempo_transaccion_seg') and stats_limpio.get('tiempo_transaccion_seg') %}
+                            <tr>
+                                <td><strong>Media</strong></td>
+                                <td>{{ stats_crudo['tiempo_transaccion_seg']['media']|round(2) }}</td>
+                                <td>{{ stats_limpio['tiempo_transaccion_seg']['media']|round(2) }}</td>
+                                <td>{{ (stats_limpio['tiempo_transaccion_seg']['media'] - stats_crudo['tiempo_transaccion_seg']['media'])|round(2) }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Mediana</strong></td>
+                                <td>{{ stats_crudo['tiempo_transaccion_seg']['mediana']|round(2) }}</td>
+                                <td>{{ stats_limpio['tiempo_transaccion_seg']['mediana']|round(2) }}</td>
+                                <td>{{ (stats_limpio['tiempo_transaccion_seg']['mediana'] - stats_crudo['tiempo_transaccion_seg']['mediana'])|round(2) }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Desv. Estándar</strong></td>
+                                <td>{{ stats_crudo['tiempo_transaccion_seg']['desviacion_estandar']|round(2) }}</td>
+                                <td>{{ stats_limpio['tiempo_transaccion_seg']['desviacion_estandar']|round(2) }}</td>
+                                <td>{{ (stats_limpio['tiempo_transaccion_seg']['desviacion_estandar'] - stats_crudo['tiempo_transaccion_seg']['desviacion_estandar'])|round(2) }}</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center">No hay datos para calcular estadísticas</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- SECCIÓN 6: VISUALIZACIONES -->
+        <div class="section">
+            <div class="section-title">📉 Visualizaciones Estadísticas</div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+                <div class="chart-container">
+                    <div class="chart-title">Histograma - Datos Crudos</div>
+                    <img src="{{ url_for('static', filename='grafica_histograma_atipica.png') }}" style="width: 100%; border-radius: 5px;">
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-title">Histograma - Datos Limpios</div>
+                    <img src="{{ url_for('static', filename='grafica_histograma_limpia.png') }}" style="width: 100%; border-radius: 5px;">
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-title">Polígono de Frecuencia - Datos Crudos</div>
+                    <img src="{{ url_for('static', filename='grafica_poligono_de_frecuencia_atipico.png') }}" style="width: 100%; border-radius: 5px;">
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-title">Polígono de Frecuencia - Datos Limpios</div>
+                    <img src="{{ url_for('static', filename='grafica_poligono_de_frecuencia_limpio.png') }}" style="width: 100%; border-radius: 5px;">
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-title">Diagrama de Caja - Datos Crudos</div>
+                    <img src="{{ url_for('static', filename='grafica_caja_simple_atipica.png') }}" style="width: 100%; border-radius: 5px;">
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-title">Diagrama de Caja - Datos Limpios</div>
+                    <img src="{{ url_for('static', filename='grafica_caja_simple_limpia.png') }}" style="width: 100%; border-radius: 5px;">
+                </div>
+
+                <div class="chart-container" style="grid-column: span 2;">
+                    <div class="chart-title">Diagrama de Caja Comparativo - Datos Crudos</div>
+                    <img src="{{ url_for('static', filename='grafica_caja_comparativa_atipica.png') }}" style="width: 100%; border-radius: 5px;">
+                </div>
+
+                <div class="chart-container" style="grid-column: span 2;">
+                    <div class="chart-title">Diagrama de Caja Comparativo - Datos Limpios</div>
+                    <img src="{{ url_for('static', filename='grafica_caja_comparativa_limpia.png') }}" style="width: 100%; border-radius: 5px;">
+                </div>
+            </div>
+
+            <div style="margin-top: 2rem;">
+                <div class="chart-container">
+                    <div class="chart-title">Dispersión Interactivo - Datos Crudos (Tiempo vs Monto)</div>
+                    <iframe src="{{ url_for('static', filename='dispersion_interactivo_atipico.html') }}"></iframe>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-title">Dispersión Interactivo - Datos Limpios (Tiempo vs Monto)</div>
+                    <iframe src="{{ url_for('static', filename='dispersion_interactivo_limpio.html') }}"></iframe>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-title">Barras Interactivo - Datos Crudos (Promedio por Ciudad)</div>
+                    <iframe src="{{ url_for('static', filename='barras_interactivo_atipico.html') }}"></iframe>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-title">Barras Interactivo - Datos Limpios (Promedio por Ciudad)</div>
+                    <iframe src="{{ url_for('static', filename='barras_interactivo_limpio.html') }}"></iframe>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-title">Gráfico Circular - Datos Crudos (Participación por Ciudad)</div>
+                    <iframe src="{{ url_for('static', filename='circular_interactivo_atipico.html') }}"></iframe>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-title">Gráfico Circular - Datos Limpios (Participación por Ciudad)</div>
+                    <iframe src="{{ url_for('static', filename='circular_interactivo_limpio.html') }}"></iframe>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECCIÓN 7: GENERACIÓN DE INFORME PDF -->
+        {% if rol in ['Analista de Riesgo', 'Administrador del Sistema'] %}
+        <div class="section">
+            <div class="section-title">📄 Generación de Informe PDF (APA 7)</div>
+
+            <p style="margin-bottom: 1.5rem; color: #718096;">
+                Descarga un informe completo en formato PDF que incluye:
+            </p>
+
+            <form method="POST" action="{{ url_for('generar_informe') }}">
+                <button type="submit" class="btn btn-primary btn-block" style="padding: 1rem; font-size: 1.1rem;">
+                    📥 Generar y Descargar Informe PDF
+                </button>
+            </form>
+
+            <div style="margin-top: 1rem; padding: 1rem; background: #fef5e7; border-left: 4px solid #ed8936; border-radius: 5px;">
+                <strong style="color: #7c2d12;">⚠ Nota:</strong>
+                <p style="color: #7c2d12; margin: 0.5rem 0 0 0;">
+                    El informe será generado por <strong>{{ usuario }}</strong> con rol <strong>{{ rol }}</strong>.
+                    Esta información quedará registrada en el PDF para auditoría.
+                </p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+</body>
+</html>
