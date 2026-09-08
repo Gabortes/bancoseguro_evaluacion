@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Usuarios - Red BancoSeguro</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <span class="navbar-brand">🏦 Red BancoSeguro</span>
+        <div class="navbar-info">
+            <div>
+                <span>👤 {{ usuario }}</span>
+                <span class="badge">{{ rol }}</span>
+            </div>
+            <div class="navbar-links">
+                <a href="{{ url_for('index') }}">📊 Análisis</a>
+                <a href="{{ url_for('usuarios') }}">👥 Usuarios</a>
+                <a href="{{ url_for('logout') }}">🚪 Cerrar Sesión</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="section">
+            <div class="section-title">👥 Gestión de Usuarios del Sistema</div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            <span class="alert-icon">
+                                {% if category == 'error' %}✕{% elif category == 'success' %}✓{% else %}ℹ{% endif %}
+                            </span>
+                            <span>{{ message }}</span>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre de Usuario</th>
+                            <th>Correo</th>
+                            <th>Rol</th>
+                            <th>Fecha de Creación</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if usuarios %}
+                            {% for usuario_item in usuarios %}
+                            <tr>
+                                <td><strong>#{{ usuario_item['id_usuario'] }}</strong></td>
+                                <td>{{ usuario_item['nombre_usuario'] }}</td>
+                                <td><code>{{ usuario_item['correo'] }}</code></td>
+                                <td>
+                                    <span class="badge" style="background: 
+                                        {% if usuario_item['rol'] == 'Administrador del Sistema' %}#667eea
+                                        {% elif usuario_item['rol'] == 'Auditor de Calidad' %}#ed8936
+                                        {% elif usuario_item['rol'] == 'Analista de Riesgo' %}#48bb78
+                                        {% else %}#718096{% endif %}
+                                    ; color: white; padding: 0.4rem 0.8rem; border-radius: 3px; display: inline-block;">
+                                        {{ usuario_item['rol'] }}
+                                    </span>
+                                </td>
+                                <td>{{ usuario_item['fecha_creacion'].strftime('%d/%m/%Y %H:%M') if usuario_item['fecha_creacion'] else 'N/A' }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="5" class="text-center">No hay usuarios registrados</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="margin-top: 2rem; padding: 1.5rem; background: #f7fafc; border-radius: 5px;">
+                <h3 style="margin-bottom: 1rem;">📊 Estadísticas</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Total de Usuarios</h3>
+                        <div class="stat-value">{{ usuarios|length }}</div>
+                    </div>
+                    <div class="stat-card success">
+                        <h3>Administradores</h3>
+                        <div class="stat-value">
+                            {% set admin_count = usuarios|selectattr('rol', 'equalto', 'Administrador del Sistema')|list|length %}
+                            {{ admin_count }}
+                        </div>
+                    </div>
+                    <div class="stat-card warning">
+                        <h3>Auditores</h3>
+                        <div class="stat-value">
+                            {% set auditor_count = usuarios|selectattr('rol', 'equalto', 'Auditor de Calidad')|list|length %}
+                            {{ auditor_count }}
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Analistas</h3>
+                        <div class="stat-value">
+                            {% set analista_count = usuarios|selectattr('rol', 'equalto', 'Analista de Riesgo')|list|length %}
+                            {{ analista_count }}
+                        </div>
+                    </div>
+                    <div class="stat-card danger">
+                        <h3>Cajeros</h3>
+                        <div class="stat-value">
+                            {% set cajero_count = usuarios|selectattr('rol', 'equalto', 'Cajero Registrador')|list|length %}
+                            {{ cajero_count }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 2rem; text-align: center;">
+                <a href="{{ url_for('index') }}" class="btn btn-primary">← Volver al Análisis</a>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
